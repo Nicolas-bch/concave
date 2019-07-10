@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+</style>
+<html lang="ja">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.5.1/dist/leaflet.css"
+        integrity="sha512-xwE/Az9zrjBIphAcBb3F6JVqxf46+CDLwfLMHloNu6KEQCAWi6HcDUbeOfBIptF7tcCzusKFjFw2yuvEpDL9wQ=="
+        crossorigin="" />
+    <script src="https://unpkg.com/leaflet@1.5.1/dist/leaflet.js"
+        integrity="sha512-GffPMF3RvMeYyc1LWMHtK8EbPv0iNZ8/oTtHPx9/cc2ILxQ+u905qIwdpULaqDkyBKgOaB57QTMg7ztg8Jm2Og=="
+        crossorigin=""></script>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css"
+        integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous">
+    <script src="https://kit.fontawesome.com/1337fa5d50.js"></script>
+    <script src='https://npmcdn.com/@turf/turf/turf.min.js'></script>
+    <style>
+        body,
+        html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+        }
+
+        #map {
+            height: 100%;
+            z-index: 1;
+        }
+
+        #ctrl {
+            position: absolute;
+            top: 0px;
+            left: 100%;
+            margin-left: -800px;
+            width: 800px;
+            z-index: 10;
+            background-color: #37474F;
+            box-shadow: 10px -10px 8px black;
+            padding: 5px;
+        }
+
+        .toast {
+            z-index: 100;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="map"></div>
+    <div id="ctrl">
+        <div class="container">
+            <form>
+                <div class="row">
+
+                    <button id="btnAdd" type="button" class="btn btn-block btn-primary btn-sm col-sm-1"><i
+                            class="fas fa-plus-square"></i></button>
+                    <div class="col-sm-3">
+                        <div class="btn-group btn-group-toggle" data-toggle="buttons">
+                            <label class="btn btn-success active">
+                                <input type="radio" name="tglShape" id="shape_convex" autocomplete="off" checked> Convex
+                            </label>
+                            <label class="btn btn-success">
+                                <input type="radio" name="tglShape" id="shape_bbox" autocomplete="off"> BBox
+                            </label>
+                        </div>
+                    </div>
+                    <div class="col-sm-7">
+                        <input type="text" id="geojson" class="form-control form-control-sm" placeholder="GeoJSON">
+                    </div>
+                    <button type="button" id="btnCopy" class="btn btn-info btn-block btn-sm col-sm-1"><i
+                            class="far fa-copy"></i></button>
+
+                </div>
+            </form>
+        </div>
+    </div>
+    <div aria-live="polite" aria-atomic="true" style="position:absolute; top:0; left:0; width:100%; height:100%;">
+        <div class="toast" id="copydone" role="alert" aria-live="assertive" aria-atomic="true"
+            style="position: absolute; top: 80px; right: 10px;">
+            <div class="toast-header">
+                <strong class="mr-auto">Nortice</strong>
+                <small class="text-muted">Just Now</small>
+                <button type="button" class="ml-2 mb-1 close" data-dismiss="toast" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="toast-body">
+                A GeoJSON formatted bolygon was copied to Clipboard.
+            </div>
+        </div>
+    </div>
+    <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js"
+        integrity="sha384-q8i/X+965DzO0rT7abK41JStQIAqVgRVzpbzo5smXKp4YfRvH+8abtTE1Pi6jizo"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.7/umd/popper.min.js"
+        integrity="sha384-UO2eT0CpHqdSJQ6hJty5KVphtPhzWj9WO1clHTMGa3JDZwrnQq4sF86dIHNDz0W1"
+        crossorigin="anonymous"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js"
+        integrity="sha384-JjSmVgyd0p3pXB1rRibZUAYoIIy6OrQ6VrjIEaFf/nJGzIxFDsf4x0xIM+B07jRM"
+        crossorigin="anonymous"></script>
+    <script defer>
+        let concave = null;
+        let markers = [];
+        const redrawConcave = () => {
+            if (markers.length == 0) {
+                return;
+            }
+            const points = markers.map((marker) => {
+                const latLng = marker.getLatLng();
+                return turf.point([latLng.lng, latLng.lat]);
+            });
+            const collection = turf.featureCollection(points);
+            const hull = ((document.getElementById("shape_bbox").checked) ? turf.bboxPolygon(turf.bbox(collection)) : turf.convex(collection))
+            document.getElementById('geojson').value = JSON.stringify(turf.getGeom(hull));
+            //console.log(hull);
+            if (concave) {
+                concave.removeFrom(map)
+            }
+            concave = L.geoJSON(hull);
+            concave.addTo(map)
+        }
+
+        const map = L.map("map").setView([35.4439383, 139.6509414], 13);
+        const baseMap = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+            subdomains: 'abcd',
+            maxZoom: 19
+        });
+        baseMap.addTo(map);
+        document.getElementsByName('tglShape').forEach((tgl) => {
+            console.log(tgl);
+            tgl.onchange = (event) => {
+                console.log(event);
+                redrawConcave();
+            }
+        })
+
+        $('.toast').toast({
+            animation: true,
+            autohide: true,
+            delay: 2000
+        });
+        document.getElementById('btnCopy').addEventListener('click', (event) => {
+            navigator.clipboard.writeText(document.getElementById('geojson').value)
+                .then(function () {
+                    $('#copydone').toast('show');
+                }, function () {
+                    console.log('miss');
+                });
+        })
+        document.getElementById('btnAdd').addEventListener('click', (event) => {
+            event.stopPropagation();
+            event.preventDefault();
+            let b = map.getBounds().pad(-0.8);
+            let points = L.geoJSON(turf.randomPoint((markers.length == 0 ? 3 : 1), { bbox: [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()] }), {
+                pointToLayer: (geoJsonPoint, latlng) => {
+                    const m = L.marker(latlng, { riseOnHover: true, draggable: true, autoPan: true });
+                    m.on('dragend', (e) => {
+                        redrawConcave();
+                    });
+                    markers.push(m);
+                    return m;
+                }
+            });
+            points.addTo(map);
+            redrawConcave();
+            console.log(points);
+        });
+    </script>
+</body>
+
+</html>
