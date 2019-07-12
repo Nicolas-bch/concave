@@ -93,6 +93,7 @@ typings/
 .dynamodb/
 
 ### VisualStudioCode ###
+*.code-workspace
 .vscode/*
 !.vscode/settings.json
 !.vscode/tasks.json
@@ -130,3 +131,4 @@ $RECYCLE.BIN/
 *.lnk
 
 # End of https://www.gitignore.io/api/node,windows,visualstudiocode
+*.*

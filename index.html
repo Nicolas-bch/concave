@@ -36,18 +36,65 @@
             width: 800px;
             z-index: 10;
             background-color: #37474F;
-            box-shadow: 10px -10px 8px black;
+            box-shadow: -2px 2px 6px 2px rgba(55, 71, 79, 0.596);
             padding: 5px;
         }
 
         .toast {
             z-index: 100;
         }
+
+        #scaleOnOff {
+            z-index: 1000;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+
+        #scale {
+            position: absolute;
+            bottom: 0px;
+            left: -20px;
+            width: 800px;
+            z-index: 11;
+            margin-left: -800px;
+            background-color: #37474F;
+            box-shadow: 2px -2px 6px 2px #37474f98;
+            padding: 5px;
+        }
+
+        #scaleOnOff {
+            display: none;
+        }
+
+        #scaleOnOff:checked~#scale {
+            transform: translateX(820px);
+            transition: transform 0.8s cubic-bezier(.34, -0.29, .38, .8);
+        }
+
+        #scaleOnOff~#scale {
+            transform: translateX(-20px);
+            transition: transform 0.8s cubic-bezier(.55, .02, .69, 1.15);
+        }
     </style>
 </head>
 
 <body>
     <div id="map"></div>
+    <input type="checkbox" id="scaleOnOff" name="scale">
+    <div id="scale" class="containe">
+        <div class="row">
+            <div class="col-sm-2">
+                <input type="text" id="concavity_tb" class="form-control form-control-sm" value="1">
+            </div>
+            <div class="col-sm-9">
+                <input type="range" class="custom-range" step="1" id="concavity" min="1" max="10000" value=500>
+            </div>
+            <div class="col-sm-1" style="color:#ffffff">
+                m
+            </div>
+        </div>
+    </div>
     <div id="ctrl">
         <div class="container">
             <form>
@@ -55,8 +102,12 @@
 
                     <button id="btnAdd" type="button" class="btn btn-block btn-primary btn-sm col-sm-1"><i
                             class="fas fa-plus-square"></i></button>
-                    <div class="col-sm-3">
+                    <div class="col-sm-5">
                         <div class="btn-group btn-group-toggle" data-toggle="buttons">
+                            <label class="btn btn-success">
+                                <input type="radio" name="tglShape" id="shape_concave" autocomplete="off">
+                                Concave
+                            </label>
                             <label class="btn btn-success active">
                                 <input type="radio" name="tglShape" id="shape_convex" autocomplete="off" checked> Convex
                             </label>
@@ -65,7 +116,7 @@
                             </label>
                         </div>
                     </div>
-                    <div class="col-sm-7">
+                    <div class="col-sm-5">
                         <input type="text" id="geojson" class="form-control form-control-sm" placeholder="GeoJSON">
                     </div>
                     <button type="button" id="btnCopy" class="btn btn-info btn-block btn-sm col-sm-1"><i
@@ -102,23 +153,51 @@
     <script defer>
         let concave = null;
         let markers = [];
+        let circles = [];
         const redrawConcave = () => {
             if (markers.length == 0) {
-                return;
+                return
             }
+
+            circles.forEach((circle) => {
+                circle.removeFrom(map);
+            });
+            circles = [];
             const points = markers.map((marker) => {
                 const latLng = marker.getLatLng();
+                if (document.getElementById("shape_concave").checked) {
+                    let c = L.geoJSON(turf.circle([latLng.lng, latLng.lat], document.getElementById("concavity").value, { units: 'meters' }),
+                        {
+                            "color": "#ff7800",
+                            "weight": 1,
+                            "opacity": 1,
+                            "fillOpacity": 0.01
+                        })
+                    c.addTo(map);
+                    circles.push(c);
+                }
                 return turf.point([latLng.lng, latLng.lat]);
             });
             const collection = turf.featureCollection(points);
-            const hull = ((document.getElementById("shape_bbox").checked) ? turf.bboxPolygon(turf.bbox(collection)) : turf.convex(collection))
-            document.getElementById('geojson').value = JSON.stringify(turf.getGeom(hull));
+            let hull = null;
+            if (document.getElementById("shape_concave").checked) {
+                hull = turf.concave(collection, { maxEdge: document.getElementById("concavity").value, units: "meters" });
+            } else if (document.getElementById("shape_convex").checked) {
+                hull = turf.convex(collection);
+            } else {
+                hull = turf.bboxPolygon(turf.bbox(collection));
+            }
+            if (hull != null) {
+                document.getElementById('geojson').value = JSON.stringify(turf.getGeom(hull));
+            } else {
+                document.getElementById('geojson').value = "";
+            }
             //console.log(hull);
             if (concave) {
                 concave.removeFrom(map)
             }
             concave = L.geoJSON(hull);
-            concave.addTo(map)
+            concave.addTo(map);
         }
 
         const map = L.map("map").setView([35.4439383, 139.6509414], 13);
@@ -129,19 +208,18 @@
         });
         baseMap.addTo(map);
         document.getElementsByName('tglShape').forEach((tgl) => {
-            console.log(tgl);
+            //console.log(tgl);
             tgl.onchange = (event) => {
-                console.log(event);
+                document.getElementById("scaleOnOff").checked = document.getElementById("shape_concave").checked;
                 redrawConcave();
             }
         })
-
         $('.toast').toast({
             animation: true,
             autohide: true,
             delay: 2000
         });
-        document.getElementById('btnCopy').addEventListener('click', (event) => {
+        $('#btnCopy').on('click', (event) => {
             navigator.clipboard.writeText(document.getElementById('geojson').value)
                 .then(function () {
                     $('#copydone').toast('show');
@@ -149,7 +227,7 @@
                     console.log('miss');
                 });
         })
-        document.getElementById('btnAdd').addEventListener('click', (event) => {
+        $('#btnAdd').on('click', (event) => {
             event.stopPropagation();
             event.preventDefault();
             let b = map.getBounds().pad(-0.8);
@@ -160,12 +238,20 @@
                         redrawConcave();
                     });
                     markers.push(m);
+                    circles.push(L.geoJSON(turf.circle([latlng.lng, latlng.lat], document.getElementById("concavity").value, { units: 'meters' })));
+                    circles[circles.length - 1].addTo(map)
                     return m;
                 }
             });
             points.addTo(map);
             redrawConcave();
             console.log(points);
+        });
+
+        $("#concavity").on('change', (event) => {
+            console.log(document.getElementById("concavity").value);
+            document.getElementById("concavity_tb").value = document.getElementById("concavity").value;
+            redrawConcave();
         });
     </script>
 </body>
